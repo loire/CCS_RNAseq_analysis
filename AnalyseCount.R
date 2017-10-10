@@ -4,7 +4,7 @@ require(ggrepel)
 mytheme = theme_bw()
 
 # create samples names list
-lf = list.files(".",pattern="G.txt")
+lf = list.files("Data/",pattern="G.txt")
 samples = c()
 for (f in lf){
 	print(f)
@@ -13,8 +13,8 @@ for (f in lf){
 }
 # Read big table
 
-data = read.table("bigtables.csv",header=F)
-#data = read.table("tmp",header=F)
+data = read.table("Data/bigtables.csv",header=F)
+#data = read.table("Data/tmp",header=F)
 glimpse(data)
 rows = data %>% select(1)
 data = data %>% select(-seq(1,71,2))
@@ -26,11 +26,11 @@ mdata = as.matrix(data)
 
 
 # Get sample infos file
-infos = read.table("sample.csv",header=T)
+infos = read.table("Data/sample.csv",header=T)
 
 # make some graph with raw counts
 data %>% gather(sample,count,1:36) %>% ggplot + geom_histogram(aes(x=log(count))) + facet_wrap(~sample) + mytheme
-ggsave("rawcount_histo.pdf")
+ggsave("Figures/rawcount_histo.pdf")
 
 
 # Convert to count per million, plot as function to raw count as a way to find cpm value correponding to 10 reads c ounts
@@ -52,7 +52,7 @@ filtmdata = mdata[keep,]
 DG = DGEList(counts = filtmdata)
 
 ggplot(data.frame(name = colnames(DG),libsize = DG$samples$lib.size,type = infos$type,time=infos$time,sample=infos$sample) %>% arrange(.,sample,time) ) + geom_bar(aes(x=name,y=libsize,fill=sample),stat="identity") + facet_wrap(~ type,scale="free_x")  + scale_fill_brewer(palette ="Dark2") + mytheme + theme(axis.text.x = element_text(angle=45,hjust =1 ))
-ggsave("Unnormalized_lib_size.pdf")
+ggsave("Figures/Unnormalized_lib_size.pdf")
 
 logcount = cpm(DG$counts,log=T)
 
@@ -62,11 +62,11 @@ infos$name=as.factor(infos$name)
 datalogcpm = data.frame(logcount) %>% gather(name,count,1:36) %>% left_join(infos,by = "name")
 
 ggplot(datalogcpm %>% arrange(.,sample,time)) + geom_violin(aes(x=name,y=count,fill=sample))  + facet_wrap(~ type,scale="free_x")  + scale_fill_brewer(palette ="Dark2") + mytheme + theme(axis.text.x = element_text(angle=45,hjust =1 ))
-ggsave("LogCPM_violin_count.pdf")
-ggsave("LogCPM_violin_count.png")
+ggsave("Figures/LogCPM_violin_count.pdf")
+ggsave("Figures/LogCPM_violin_count.png")
 
 ggplot(datalogcpm %>% arrange(.,sample,time)) + geom_jitter(aes(x=name,y=count,color=sample))  + facet_wrap(~ type,scale="free_x")  + scale_color_brewer(palette ="Dark2") + mytheme + theme(axis.text.x = element_text(angle=45,hjust =1 ))
-ggsave("LogCPM_jitter.pdf")
+ggsave("Figures/LogCPM_jitter.pdf")
 
 
 ggplot(data.frame(name = colnames(DG),libsize = DG$samples$lib.size,type = infos$type,time=infos$time,sample=infos$sample) %>% arrange(.,sample,time) ) + geom_bar(aes(x=name,y=libsize,fill=sample),stat="identity") + facet_wrap(~ type,scale="free_x")  + scale_fill_brewer(palette ="Dark2") + mytheme + theme(axis.text.x = element_text(angle=45,hjust =1 ))
@@ -83,7 +83,7 @@ DG = calcNormFactors(DG)
 mdata = plotMDS(DG)
 dfmdf=data.frame(x=mdata$x,y=mdata$y)
 ggplot(dfmdf %>% mutate(name = rownames(dfmdf)) %>% left_join(infos,by="name" )) + geom_point(aes(x=x,y=y,color=type,shape=as.factor(time)),size=3) + geom_text_repel(aes(x=x,y=y,color = type,label= name)) + mytheme + ggtitle("MDS plot")
-ggsave("MDS_All_DATA.pdf")
+ggsave("Figures/MDS_All_DATA.pdf")
 
 
 
@@ -93,18 +93,18 @@ ggsave("MDS_All_DATA.pdf")
 mdata50 = plotMDS(DG,top =50)
 dfmdf=data.frame(x=mdata50$x,y=mdata50$y)
 ggplot(dfmdf %>% mutate(name = rownames(dfmdf)) %>% left_join(infos,by="name" )) + geom_point(aes(x=x,y=y,color=type,shape=as.factor(time)),size=3) + geom_text_repel(aes(x=x,y=y,color = type,label= name)) + mytheme
-ggsave("MDS_All_DATA_50_high_expressed_genes.pdf")
-ggsave("MDS_All_DATA_50_high_expressed_genes.png")
+ggsave("Figures/MDS_All_DATA_50_high_expressed_genes.pdf")
+ggsave("Figures/MDS_All_DATA_50_high_expressed_genes.png")
 
 
 
 # Parsing GO annotation of genes for further analysis
 
-GO = read.csv("GO_annot.txt",sep="|")
+GO = read.csv("Data/GO_annot.txt",sep="|")
 GO$geneID = as.character(GO$NCBI.gene.ID) 
 
 # Parse gene function description from vector base + GOslim
-Desc = read.csv("Gene_Description.txt",sep="|",header=T)
+Desc = read.csv("Data/Gene_Description.txt",sep="|",header=T)
 Long_description = Desc %>% group_by(NCBI.gene.ID,Gene.description) %>% summarize(GOslims = toString(GOSlim.GOA.Description)) %>% ungroup
 colnames(Long_description)[1] = "geneID"
 Long_description$geneID =  as.character(Long_description$geneID)
@@ -128,7 +128,7 @@ DG = DGEList(counts = filtmddata)
 mddata = plotMDS(DG,top = 20)
 ddfmdf=data.frame(x=mddata$x,y=mddata$y)
 ggplot(ddfmdf %>% mutate(name = rownames(ddfmdf)) %>% left_join(infos,by="name" )) + geom_point(aes(x=x,y=y,color=type,shape=as.factor(time)),size=3) + geom_text_repel(aes(x=x,y=y,color = type,label= name)) + mytheme
-ggsave("MDS_Dengue_DATA.png")
+ggsave("Figures/MDS_Dengue_DATA.png")
 # differentially expresssed genes:
 # First remove crappy mock sample:
 dengue_data = data %>% select(contains("Dengue"),contains("MOCKB"))  %>% select(-contains("MOCKB24hc")) #%>% select(-contains("Dengue6ja"))
@@ -164,7 +164,7 @@ dengue_DE_vals = dengue_DE_vals %>% gather(geneID,count,1:(length(colnames(dengu
 dengue_DE_vals = dengue_DE_vals %>% full_join(df_dengue_24_vs_mockB24, by = "geneID")
 dengue_DE_vals = dengue_DE_vals %>% mutate(FCsign = ifelse(logFC < 0,"up","down")) 
 ggplot(dengue_DE_vals) + geom_line(aes(x=sample,y=count,group = geneID, color = FCsign)) + theme_bw() + ylab("count per million") + coord_flip() + ggtitle("Gene expression profile: \nDifferentially expressed genes in the dengue infected samples") + scale_color_discrete(name="",labels = c("Down-regulated","Up-regulated"))
-ggsave("dengue_24_expression_profile.png")
+ggsave("Figures/dengue_24_expression_profile.png")
 
 
 # Test late response
@@ -182,7 +182,7 @@ dengue_DE_vals = dengue_DE_vals %>% gather(geneID,count,1:(length(colnames(dengu
 dengue_DE_vals = dengue_DE_vals %>% full_join(df_dengue_6j_vs_mockB6j, by = "geneID")
 dengue_DE_vals = dengue_DE_vals %>% mutate(FCsign = ifelse(logFC < 0,"up","down")) 
 ggplot(dengue_DE_vals) + geom_line(aes(x=sample,y=count,group = geneID, color = FCsign)) + theme_bw() + ylab("count per million") + coord_flip() + ggtitle("Gene expression profile: \nDifferentially expressed genes in the dengue infected samples") + scale_color_discrete(name="",labels = c("Down-regulated","Up-regulated"))
-ggsave("dengue_6j_expression_profile.png")
+ggsave("Figures/dengue_6j_expression_profile.png")
 
 
 
@@ -203,7 +203,7 @@ DG = DGEList(counts = filtmddata)
 mddata = plotMDS(DG,top = 20)
 ddfmdf=data.frame(x=mddata$x,y=mddata$y)
 ggplot(ddfmdf %>% mutate(name = rownames(ddfmdf)) %>% left_join(infos,by="name" )) + geom_point(aes(x=x,y=y,color=type,shape=as.factor(time)),size=3) + geom_text_repel(aes(x=x,y=y,color = type,label= name)) + mytheme
-ggsave("MDS_RVF_DATA.png")
+ggsave("Figures/MDS_RVF_DATA.png")
 # differentially expresssed genes:
 # First remove crappy mock sample:
 RVF_data = data %>% select(contains("RVF"),contains("MOCKB"))  %>% select(-contains("MOCKB24hc")) #%>% select(-contains("RVF6ja"))
@@ -237,7 +237,7 @@ RVF_DE_vals = RVF_DE_vals %>% gather(geneID,count,1:(length(colnames(RVF_DE_vals
 RVF_DE_vals = RVF_DE_vals %>% full_join(df_RVF_24_vs_mockB24, by = "geneID")
 RVF_DE_vals = RVF_DE_vals %>% mutate(FCsign = ifelse(logFC < 0,"up","down")) 
 ggplot(RVF_DE_vals) + geom_line(aes(x=sample,y=count,group = geneID, color = FCsign)) + theme_bw() + ylab("count per million") + coord_flip() + ggtitle("Gene expression profile: \nDifferentially expressed genes in the RVF infected samples") + scale_color_discrete(name="",labels = c("Down-regulated","Up-regulated"))
-ggsave("RVF_24_expression_profile.png")
+ggsave("Figures/RVF_24_expression_profile.png")
 # Test late response
 qlf_RVF_6j_vs_mockB6j =  glmTreat(fit, contrast=c(0,-1,0,1),lfc = 1)
 DE_RVF_6j_vs_mockB6j  =  topTags(qlf_RVF_6j_vs_mockB6j,n=1000)
@@ -253,7 +253,7 @@ RVF_DE_vals = RVF_DE_vals %>% gather(geneID,count,1:(length(colnames(RVF_DE_vals
 RVF_DE_vals = RVF_DE_vals %>% full_join(df_RVF_6j_vs_mockB6j, by = "geneID")
 RVF_DE_vals = RVF_DE_vals %>% mutate(FCsign = ifelse(logFC < 0,"up","down")) 
 ggplot(RVF_DE_vals) + geom_line(aes(x=sample,y=count,group = geneID, color = FCsign)) + theme_bw() + ylab("count per million") + coord_flip() + ggtitle("Gene expression profile: \nDifferentially expressed genes in the RVF infected samples") + scale_color_discrete(name="",labels = c("Down-regulated","Up-regulated"))
-ggsave("RVF_6j_expression_profile.png")
+ggsave("Figures/RVF_6j_expression_profile.png")
 
 
 # Search for overlap in gene list:
@@ -265,13 +265,13 @@ common =  intersect(dengue_list,RVF_list)$geneID
 DE_vals = RVF_DE_vals %>% filter(geneID %in% common ) %>% rbind(dengue_DE_vals %>% filter(geneID %in% common) )
 
 ggplot(DE_vals) + geom_line(aes(x=sample,y=count,group = geneID, color = FCsign)) + theme_bw() + ylab("count per million") + coord_flip() + ggtitle("Gene expression profile: \nDifferentially expressed genes in the RVF infected samples") + scale_color_discrete(name="",labels = c("Down-regulated","Up-regulated"))
-ggsave("Final_figure.pdf")
+ggsave("Figures/Final_figure.pdf")
 
 DE_vals$sample =  factor(DE_vals$sample)
 tmp = DE_vals$sample %>% levels
 DE_vals$sample =  factor(DE_vals$sample,levels=rev(c(tmp[1:5],tmp[23:28],tmp[6:22])))
 
-ggplot(DE_vals %>% filter(FCsign =="up")) + geom_line(aes(x=sample,y=count,group = geneID, color = geneID)) + theme_bw() + ylab("count per million") + coord_flip() + ggtitle("Gene expression profile: \nDifferentially expressed genes in the RVF infected samples") + scale_color_discrete(name="",labels = Gene_labs )  + facet_wrap(~ geneID,scale="free_x")
+#ggplot(DE_vals %>% filter(FCsign =="up")) + geom_line(aes(x=sample,y=count,group = geneID, color = geneID)) + theme_bw() + ylab("count per million") + coord_flip() + ggtitle("Gene expression profile: \nDifferentially expressed genes in the RVF infected samples") + scale_color_discrete(name="",labels = Gene_labs )  + facet_wrap(~ geneID,scale="free_x")
 
 
 DE_vals$Gene.description  = factor(DE_vals$Gene.description)
@@ -288,8 +288,8 @@ return(new)
 }
 tmp = rmn(tmp)
 
-ggplot(DE_vals %>% filter(FCsign =="up")) + geom_line(aes(x=sample,y=count,group = geneID, color = geneID)) + theme_bw() + ylab("count per million") + ggtitle("Global expression profile", subtitle = " UP-regulated genes in the RVF and dengue samples") + scale_color_discrete(name="Gene description",labels = Gene_labs )  + facet_wrap(~ geneID,scale="free_y") + theme(axis.text.x = element_text(angle=45,hjust=1)) + theme(panel.grid=element_blank(),axis.ticks.x = element_bank()) + scale_x_discrete(labels = tmp )
-ggsave("tmp.pdf")
+ggplot(DE_vals %>% filter(FCsign =="up")) + geom_line(aes(x=sample,y=count,group = geneID, color = geneID)) + theme_bw() + ylab("count per million") + ggtitle("Global expression profile", subtitle = " UP-regulated genes in the RVF and dengue samples") + scale_color_discrete(name="Gene description",labels = Gene_labs )  + facet_wrap(~ geneID,scale="free_y") + theme(axis.text.x = element_text(angle=45,hjust=1)) + theme(panel.grid=element_blank(),axis.ticks.x = element_blank()) + scale_x_discrete(labels = tmp )
+ggsave("Figures/DE_genes_profile.pdf",width=15,height=7.5)
 
 
 
