@@ -2,32 +2,12 @@ require(tidyverse)
 require(edgeR)
 require(ggrepel)
 mytheme = theme_bw()
-
-# create samples names list
-lf = list.files("Data/",pattern="G.txt")
-samples = c()
-for (f in lf){
-	print(f)
-	spl = strsplit(f,"[.]")[[1]]
-	samples=c(samples,spl[[1]])
-}
-# Read big table
-
-data = read.table("Data/bigtables.csv",header=F)
-#data = read.table("Data/tmp",header=F)
+data  = read.csv("Data/Raw_Counts_RNA-Seq_CetreSossah.txt",sep=",",header=T,row.names = 1)
+data %>% dim
 glimpse(data)
-rows = data %>% select(1)
-data = data %>% select(-seq(1,71,2))
-rownames(data) = rows$V1
-colnames(data) = samples
-
 # transform as a matrix
 mdata = as.matrix(data)
-
-
-# Get sample infos file
-infos = read.table("Data/sample.csv",header=T)
-
+mdata %>%  head
 # make some graph with raw counts
 data %>% gather(sample,count,1:36) %>% ggplot + geom_histogram(aes(x=log(count))) + facet_wrap(~sample) + mytheme
 ggsave("Figures/rawcount_histo.pdf")
@@ -39,13 +19,14 @@ mdatacpm = cpm(mdata)
 plot(mdatacpm[,4],mdata[,4],xlim=c(0,3),ylim=c(0,50))
 
 # 0.25 cpm is an okay value to filter. We will keep gene with at leats  0.25 cpm in three samples
-abovecpm = mdatacpm > 0.25 
+abovecpm = mdatacpm > 0.75 
 table(rowSums(abovecpm))
 keep = rowSums(abovecpm) >= 3 
 
 # number of retained genes :
 summary(keep)
-# 7792 / 17342 , I'm okay with that
+
+# 9305 / 17342 , I'm okay with that
 
 filtmdata = mdata[keep,]
 
@@ -86,9 +67,6 @@ ggplot(dfmdf %>% mutate(name = rownames(dfmdf)) %>% left_join(infos,by="name" ))
 ggsave("Figures/MDS_All_DATA.pdf")
 
 
-
-
-
 # MDS with 50  highly expressed genes
 mdata50 = plotMDS(DG,top =50)
 dfmdf=data.frame(x=mdata50$x,y=mdata50$y)
@@ -96,18 +74,16 @@ ggplot(dfmdf %>% mutate(name = rownames(dfmdf)) %>% left_join(infos,by="name" ))
 ggsave("Figures/MDS_All_DATA_50_high_expressed_genes.pdf")
 ggsave("Figures/MDS_All_DATA_50_high_expressed_genes.png")
 
-
-
-# Parsing GO annotation of genes for further analysis
-
-GO = read.csv("Data/GO_annot.txt",sep="|")
-GO$geneID = as.character(GO$NCBI.gene.ID) 
+# # Parsing GO annotation of genes for further analysis
+# GO = read.csv("Data/GO_annot.txt",sep="|")
+# GO$geneID = as.character(GO$NCBI.gene.ID) 
 
 # Parse gene function description from vector base + GOslim
-Desc = read.csv("Data/Gene_Description.txt",sep="|",header=T)
+Desc = read.csv("Data/Gene_description.txt",sep="\t",header=T)
 Long_description = Desc %>% group_by(NCBI.gene.ID,Gene.description) %>% summarize(GOslims = toString(GOSlim.GOA.Description)) %>% ungroup
 colnames(Long_description)[1] = "geneID"
 Long_description$geneID =  as.character(Long_description$geneID)
+
 
 
 
@@ -183,9 +159,6 @@ dengue_DE_vals = dengue_DE_vals %>% full_join(df_dengue_6j_vs_mockB6j, by = "gen
 dengue_DE_vals = dengue_DE_vals %>% mutate(FCsign = ifelse(logFC < 0,"up","down")) 
 ggplot(dengue_DE_vals) + geom_line(aes(x=sample,y=count,group = geneID, color = FCsign)) + theme_bw() + ylab("count per million") + coord_flip() + ggtitle("Gene expression profile: \nDifferentially expressed genes in the dengue infected samples") + scale_color_discrete(name="",labels = c("Down-regulated","Up-regulated"))
 ggsave("Figures/dengue_6j_expression_profile.png")
-
-
-
 
 # TEST WITH RVF_data
 
@@ -264,7 +237,9 @@ common =  intersect(dengue_list,RVF_list)$geneID
 
 DE_vals = RVF_DE_vals %>% filter(geneID %in% common ) %>% rbind(dengue_DE_vals %>% filter(geneID %in% common) )
 
-ggplot(DE_vals) + geom_line(aes(x=sample,y=count,group = geneID, color = FCsign)) + theme_bw() + ylab("count per million") + coord_flip() + ggtitle("Gene expression profile: \nDifferentially expressed genes in the RVF infected samples") + scale_color_discrete(name="",labels = c("Down-regulated","Up-regulated"))
+ggplot(DE_vals) + geom_line(aes(x=sample,y=count,group = geneID, color = FCsign)) + 
+  theme_bw() + ylab("count per million") + coord_flip() + 
+  ggtitle("Gene expression profile: \nDifferentially expressed genes in the RVF & Dengue infected samples") + scale_color_discrete(name="",labels = c("Down-regulated","Up-regulated"))
 ggsave("Figures/Final_figure.pdf")
 
 DE_vals$sample =  factor(DE_vals$sample)
@@ -272,7 +247,6 @@ tmp = DE_vals$sample %>% levels
 DE_vals$sample =  factor(DE_vals$sample,levels=rev(c(tmp[1:5],tmp[23:28],tmp[6:22])))
 
 #ggplot(DE_vals %>% filter(FCsign =="up")) + geom_line(aes(x=sample,y=count,group = geneID, color = geneID)) + theme_bw() + ylab("count per million") + coord_flip() + ggtitle("Gene expression profile: \nDifferentially expressed genes in the RVF infected samples") + scale_color_discrete(name="",labels = Gene_labs )  + facet_wrap(~ geneID,scale="free_x")
-
 
 DE_vals$Gene.description  = factor(DE_vals$Gene.description)
 Gene_labs = DE_vals$Gene.description %>% levels
@@ -290,13 +264,6 @@ tmp = rmn(tmp)
 
 ggplot(DE_vals %>% filter(FCsign =="up")) + geom_line(aes(x=sample,y=count,group = geneID, color = geneID)) + theme_bw() + ylab("count per million") + ggtitle("Global expression profile", subtitle = " UP-regulated genes in the RVF and dengue samples") + scale_color_discrete(name="Gene description",labels = Gene_labs )  + facet_wrap(~ geneID,scale="free_y") + theme(axis.text.x = element_text(angle=45,hjust=1)) + theme(panel.grid=element_blank(),axis.ticks.x = element_blank()) + scale_x_discrete(labels = tmp )
 ggsave("Figures/DE_genes_profile.pdf",width=15,height=7.5)
-
-
-
-
-
-DE_vals %>% select(sample) %>% unique
-
 
 
 
