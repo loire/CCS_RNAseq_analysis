@@ -11,7 +11,7 @@ git clone https://github.com/loire/CCS_RNAseq_analysis
 cd CCS_RNAseq_analysis
 
 Open the analyse.rmd file to knit the html or pdf report.  
-
+```
 
 ## Dependencies
 
