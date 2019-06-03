@@ -9,11 +9,14 @@ Analysis and figures can be generated using the following command on an unix ter
 ```
 git clone https://github.com/loire/CCS_RNAseq_analysis
 cd CCS_RNAseq_analysis
-Rscript AnalyseCount.R
-```
+
+Open the analyse.rmd file to knit the html or pdf report.  
+
+
 ## Dependencies
 
 R packages: [tidyverse](https://www.tidyverse.org/), [ggrepel](https://cran.r-project.org/web/packages/ggrepel/index.html),[edgeR](https://bioconductor.org/packages/release/bioc/html/edgeR.html) 
+
 
 ## Material and methods
 
@@ -38,11 +41,11 @@ Library construction and sequencing have been performed by Montpellier Genomix
 MGX contribution
 * fastq files were mapped with bowtie2 on *Aedes aegypti* [genome](https://www.ncbi.nlm.nih.gov/assembly/GCF_000004015.4/)  and transcripts raw abundance inferred with Tophat2 pipeline.
 
-Raw transcripts abundance are reported in in file Data/bigtables.csv
+Raw transcripts abundance are reported in in file Data/Raw_Counts_RNA-Seq_CetreSossah.txt
 
 
 
-![MDS plot of dataset](Figures/MDS_All_DATA_50_high_expressed_genes.png)
+![MDS plot of filtered dataset](Figures/MDS_GOOD_DATA.pdf)
 
 
 
