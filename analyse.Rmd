@@ -1,0 +1,283 @@
+---
+title: "RNAseq analysis CCS"
+author: "Etienne Loire"
+date: "23/1/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Introduction
+
+This document has been generated with a R notebook. It's purpose is to describe the analysis steps necessary for the results presented in a scientific publication
+
+Our goal is to search for commonly differentialy expressed genes in Aedes aegypti in response to several arbovirus. We will thus used comparison with mock infection responses, at two different infection stages in cell cultures derived from *Aedes aegypti*. 
+
+3 replicates of 3 differents controls (mock) and 2 viral infection (dengue, RVF) in cell cultures (lines derived from Aedes aegypti) has been performed. Early (24H) and late (6days) response have been measured by RNAseq sequencing. 
+Fastq reads have been analyzed (Cleaning, Mapping on reference and coverage analysis) have been performed by a third party (Montpellier Genomix Platefrom). 
+
+## Dataset exploration and quality control
+
+Raw counts tables are present in the "Data" directory under the name "Raw_Counts_RNA-Seq_CetreSossah.txt"
+Samples are described in the file "sample.csv" in the "Data" directory. 
+
+First step is looking at the complete dataset to assess the quality of results
+
+```{r, echo=TRUE, warning=FALSE, message=FALSE}
+require(tidyverse)
+require(edgeR)
+require(ggrepel)
+require(ggpubr)
+require(xlsx)
+mytheme = theme_bw()
+infos = read.table("Data/sample.csv",sep=",",header=T)
+infos = infos %>% mutate(subtype = substring(name,1,nchar(as.character(name))-1))
+data  = read.csv("Data/Raw_Counts_RNA-Seq_CetreSossah.txt",sep=",",header=T,row.names = 1)
+data %>% dim
+
+```
+
+We see that we have raw counts for 19610 genes in 30 samples. 
+First let's filter all genes with expression values not above 0.5 count per millions reads (cpm) in at least three of the samples. 
+```{r}
+mdata = as.matrix(data)
+mdatacpm = cpm(mdata)
+abovecpm = mdatacpm > 0.5 
+table(rowSums(abovecpm))
+keep = rowSums(abovecpm) >= 3 
+summary(keep)
+filtmdata = mdata[keep,]
+```
+9580 genes satisfy this threshold
+
+Now we will look at the library size of each samples and look at a multidimensional scaling plot (MDS) to see if genes expression is less variable among replicates than among groups of samples. 
+
+```{r, echo=TRUE}
+DG = DGEList(counts = filtmdata)
+ggplot(data.frame(name = colnames(DG),libsize = DG$samples$lib.size,type = infos$subtype,time=infos$time,sample=infos$sample) %>% 
+         arrange(.,sample,time) ) + geom_bar(aes(x=name,y=libsize,fill=sample),stat="identity") + 
+  facet_wrap(~ type,scale="free_x")  + scale_fill_brewer(name="Replicats",palette ="Dark2") + xlab("Sample") +
+  mytheme + theme(axis.text.x = element_text(angle=45,hjust =1 )) + ggtitle("Unnormalized library size in samples groups")
+ggsave("Figures/library_size.pdf")
+```
+
+We can already see that somes samples seems to have a lower depth of sequencing when compared to others (Notably MOCKB24hc, MOCKB6jb,MOCKC6ja,RVF24hc,RVF6jc). We will see in the MDS plot if this seems to be a problem. 
+
+```{r}
+mdata = plotMDS(DG,plot=FALSE)
+dfmdf=data.frame(x=mdata$x,y=mdata$y)
+dfmdf %>% mutate(name = rownames(dfmdf)) %>% left_join(infos,by="name") %>% 
+ggplot() + 
+  geom_point(aes(x=x,y=y,color=type,shape=as.factor(time)),size=3) + 
+  geom_text_repel(aes(x=x,y=y,color = type,label= name)) + 
+  scale_shape_discrete("Time (hours)") +
+  mytheme + ggtitle("MDS plot: All data")
+ggsave("Figures/MDS_All_DATA.pdf")
+```
+
+We see that there is indeed a problem with some of the cited Samples
+
+## Fitlering of unreliable samples
+```{r}
+toremove  = DG$samples %>% mutate(sample=rownames(.)) %>% filter(lib.size<5000000) %>% select(sample)
+toremove
+fdata = data %>% select(-c("MOCKB6jb","MOCKC6ja","RVF24hc","RVF6jc","MOCKB24hc"))
+mdata = as.matrix(fdata)
+mdatacpm = cpm(mdata)
+abovecpm = mdatacpm > 0.5 
+keep = rowSums(abovecpm) >= 3 
+summary(keep)
+filtmdata = mdata[keep,]
+DG = DGEList(counts = filtmdata)
+DG = calcNormFactors(DG)
+infos = infos %>% filter(!(name %in% c("MOCKB6jb","MOCKC6ja","RVF24hc","RVF6jc","MOCKB24hc")))
+# Reorder factor
+infos$type = factor(infos$type,levels=c("Dengue","RVF","Mock"))
+infos$subtype = factor(infos$subtype,levels=c("Dengue24h","Dengue6j","RVF24h","RVF6j",
+                                              "MOCKA24h","MOCKA6j","MOCKB24h","MOCKB6j","MOCKC24h","MOCKC6j"))
+ggplot(data.frame(name = colnames(DG),libsize = DG$samples$lib.size,type = infos$subtype,time=infos$time,sample=infos$sample) %>% 
+         arrange(.,sample,time) ) + geom_bar(aes(x=name,y=libsize,fill=sample),stat="identity") + 
+  facet_wrap(~ type,scale="free_x")  + scale_fill_brewer(name="Replicats",palette ="Dark2") + xlab("Sample") +
+  mytheme + theme(axis.text.x = element_text(angle=45,hjust =1 ))
+ggsave("Figures/filtered_lib_size.pdf")
+logcount = cpm(DG$counts,log=T)
+infos$name=as.factor(infos$name)
+datalogcpm = data.frame(logcount) %>% gather(name,count) %>% left_join(infos,by = "name")
+ggplot(datalogcpm %>% arrange(.,sample,time)) + geom_violin(aes(x=name,y=count,fill=sample))  + facet_wrap(~ type,scale="free_x")  + scale_fill_brewer(palette ="Dark2") + mytheme + theme(axis.text.x = element_text(angle=45,hjust =1 )) + xlab("Samples") + ylab("Log(cpm)") + 
+  ggtitle("Distribution of counts per million in samples")
+ggsave("Figures/LogCPM_violin_count.pdf",height =7,width =15)
+```
+
+Selected samples exhibit a good homogenenity among samples after normalization. 
+
+```{r}
+mdata = plotMDS(DG,top=500,plot=FALSE)
+dfmdf=data.frame(x=mdata$x,y=mdata$y)
+ggplot(dfmdf %>% mutate(name = rownames(dfmdf)) %>% left_join(infos,by="name" )) + 
+  geom_point(aes(x=x,y=y,color=subtype,shape=as.factor(time)),size=3) + 
+  geom_text_repel(aes(x=x,y=y,color = subtype,label= name)) + 
+  scale_shape_discrete("Time (hours)") + 
+  scale_color_brewer(type="qual",palette="Paired")  + xlab("Leading logFC dim1") + 
+  ylab("Leading logFC dim2") + mytheme + ggtitle("MDS plot of filtered samples")
+ggsave("Figures/MDS_GOOD_DATA.pdf")
+```
+
+Here we see a nice dataset, with replicates well grouped and a net seperation of groups of samples. The first dimension separates mock infection from viral infection, and the second dimension separates early (24H) and late (6j) respones. Additionnaly, we see that late responses to viral and mock infections are similar, indicating the possibility to conduct a direct comparison between them to search for common differential expression of genes in response to both viruses. 
+For early response, we need to analyse both viruses separatly and then search for overlap in list of differentially expressed genes. 
+
+## Differential expression analysis
+
+# GLM fit
+
+```{r}
+# First get gene annotations
+Desc = read.csv("Data/Gene_description.txt",sep="\t",header=T)
+Long_description = Desc %>% group_by(NCBI.gene.ID,Gene.name,Gene.description) %>% summarize(GOslims = toString(GOSlim.GOA.Description)) %>% ungroup
+colnames(Long_description)[1] = "geneID"
+Long_description$geneID =  as.character(Long_description$geneID)
+# Design with all biological replicates:
+subtype =  as.factor(as.vector(infos$subtype))
+design1 = model.matrix(~0+subtype)
+DG = estimateDisp(DG,design1,robust = T)
+plotBCV(DG)
+fit <- glmQLFit(DG, design1, robust=TRUE)
+plotQLDisp(fit)
+```
+
+Here we see that the biological variation (among samples in the same groups) is quite low, suggesting that our selection of samples lead to a clean datasets. Trended variation along gene expression is correct (high, then low as expression values increase). 
+The GLM fit for each genes shows the levels of variation among group, with the empirical Bayes shrinkage around trended variation in red. The fit, from my experience, seems quite good.  
+
+# Early viral response
+
+We will compare the expression values at 24H in virus versus mock infection
+
+```{r,fig.height = 20, fig.width = 15 }
+
+Early <- makeContrasts((0.5*subtypeDengue24h + 0.5*subtypeRVF24h)-(1/3*subtypeMOCKA24h + 1/3*subtypeMOCKB24h + 1/3*subtypeMOCKC24h),levels=design1)
+#DG = estimateDisp(DG,design1,robust = T)
+fit <- glmQLFit(DG, design1, robust=TRUE)
+tr <- glmTreat(fit, contrast=Early, lfc=log2(3))
+tmp  = topTags(tr,n=1000,p.value=0.05) 
+tmp$table$geneID = rownames(tmp$table)
+tmp$table %>% left_join(.,Long_description,by="geneID") %>% 
+  filter(logFC>0) %>% 
+  write.xlsx(.,file="DE_results.xlsx", sheetName = "UP_DE_genes_earlyvirus_vs_earlymock",row.names=F)
+tmp$table %>% left_join(.,Long_description,by="geneID") %>% 
+  filter(logFC<0) %>% 
+  write.xlsx(.,file="DE_results.xlsx", sheetName =" DOWN_DE_genes_earlyvirus_vs_earlymock.csv",append=T,row.names=F)
+upearly = tmp$table %>% left_join(.,Long_description,by="geneID") %>% 
+  filter(logFC>0) %>% select(c(6,7,1,5,6,8)) 
+upearly %>%  ggtexttable(rows = NULL)
+ggsave("Figures/UP_EARLY.pdf")
+```
+
+Up-relgulated genes following viral infection are, for the most part, related to native immune defense. Clip-domain Serine protease are clearly overrepresented (see https://www.ncbi.nlm.nih.gov/pubmed/26688791 ) as well as the prohibitin (https://www.ncbi.nlm.nih.gov/pubmed/20674955) and C-type lectin (https://www.ncbi.nlm.nih.gov/pubmed/20674955). Awesome. 
+
+
+```{r,fig.height = 20, fig.width = 15 }
+
+Early <- makeContrasts((0.5*subtypeDengue24h + 0.5*subtypeRVF24h)-(1/3*subtypeMOCKA24h + 1/3*subtypeMOCKB24h + 1/3*subtypeMOCKC24h),levels=design1)
+#DG = estimateDisp(DG,design1,robust = T)
+fit <- glmQLFit(DG, design1, robust=TRUE)
+tr <- glmTreat(fit, contrast=Early, lfc=log2(3))
+tmp  = topTags(tr,n=1000,p.value=0.05) 
+tmp$table$geneID = rownames(tmp$table)
+
+upearly = tmp$table %>% left_join(.,Long_description,by="geneID") %>% 
+  filter(logFC>0) %>% filter(Gene.description!="NA") %>% filter(Gene.description!="") %>%  
+  select(c(6,7,1,5,6,8)) 
+upearly %>%  ggtexttable(rows = NULL)
+ggsave("Figures/UP_EARLY_known_genes.pdf")
+```
+
+
+
+
+
+
+
+
+# Late viral response:
+
+```{r, fig.height = 20, fig.width = 15}
+Late <- makeContrasts((0.5*subtypeDengue6j + 0.5*subtypeRVF6j)-(1/3*subtypeMOCKA6j + 1/3*subtypeMOCKB6j + 1/3*subtypeMOCKC6j),levels=design1)
+tr <- glmTreat(fit, contrast=Late, lfc=log2(3))
+tmp  = topTags(tr,n=1000,p.value=0.05) 
+tmp$table$geneID = rownames(tmp$table)
+tmp$table %>% left_join(.,Long_description,by="geneID") %>% 
+  filter(logFC>0) %>% 
+  write.xlsx(.,file="DE_results.xlsx", sheetName = "UP_DE_genes_latevirus_vs_latemock",append=T,row.names=F)
+tmp$table %>% left_join(.,Long_description,by="geneID") %>% 
+  filter(logFC<0) %>% 
+  write.xlsx(.,file="DE_results.xlsx", sheetName ="DOWN_DE_genes_latevirus_vs_latemock",append=T,row.names=F)
+uplate = tmp$table %>% left_join(.,Long_description,by="geneID") %>% 
+  filter(logFC>0) %>% select(c(6,7,1,5,6,8)) 
+uplate %>%  ggtexttable(rows = NULL)
+ggsave("Figures/UP_LATE.pdf")
+```
+
+Very intersingly, many up regulated genes in the early response are also upregulated 6 days post infection relative to control: Clip-domain serine protease, prohibitin, C-type lectin notably. 
+We see the additional presence of Niemann-Pick type C family  genes - already shown as related to dengue infections https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3935818/ and macroglobulin/complement (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4767563/ !)
+Transferrin is also well known to be involved in viral response ! https://www.annualreviews.org/doi/abs/10.1146/annurev-nutr-082117-051749
+
+
+```{r, fig.height = 20, fig.width = 15}
+Late <- makeContrasts((0.5*subtypeDengue6j + 0.5*subtypeRVF6j)-(1/3*subtypeMOCKA6j + 1/3*subtypeMOCKB6j + 1/3*subtypeMOCKC6j),levels=design1)
+tr <- glmTreat(fit, contrast=Late, lfc=log2(3))
+tmp  = topTags(tr,n=1000,p.value=0.05) 
+tmp$table$geneID = rownames(tmp$table)
+uplate = tmp$table %>% left_join(.,Long_description,by="geneID") %>% 
+  filter(logFC>0) %>% filter(Gene.description!="NA") %>% filter(Gene.description!="") %>%  
+  select(c(6,7,1,5,6,8)) 
+uplate %>%  ggtexttable(rows = NULL)
+ggsave("Figures/UP_LATE_known.pdf")
+```
+
+
+
+# Late versus early response
+
+```{r}
+Early <- makeContrasts((0.5*subtypeDengue6j + 0.5*subtypeRVF6j)-(0.5*subtypeDengue24h + 0.5*subtypeRVF24h),levels=design1)
+DG = estimateDisp(DG,design1,robust = T)
+fit <- glmQLFit(DG, design1, robust=TRUE)
+tr <- glmTreat(fit, contrast=Early, lfc=log2(3))
+tmp  = topTags(tr,n=1000,p.value=0.05) 
+tmp$table$geneID = rownames(tmp$table)
+tmp$table %>% left_join(.,Long_description,by="geneID") %>% 
+  filter(logFC>0) %>% 
+  write.xlsx(.,file="DE_results.xlsx", sheetName = "UP_DE_genes_late_virus_vs_early_virus",append=T,row.names=F)
+tmp$table %>% left_join(.,Long_description,by="geneID") %>% 
+  filter(logFC<0) %>% 
+  write.xlsx(.,file="DE_results.xlsx", sheetName =" DOWN_DE_genes_late_virus_vs_early_virus",append=T,row.names=F)
+tmp$table %>% left_join(.,Long_description,by="geneID") %>% 
+  filter(logFC>0) %>% select(c(6,7,1,5,6,8)) %>%  ggtexttable(rows = NULL)
+ggsave("Figures/UP_virus_early-vs-late.pdf")
+```
+
+Only two genes significantly upregulated between early and late response. F-spondine (already seen in previous results but I am not able to ) and nidogene. The latter is also related to viral infection (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5636170/ see that spondin modifs are also cited in the article !) but is not upregulated when compared to mock infections in our data. 
+
+## Figures to check level of expression of UP genes (early and late)
+```{r,fig.height = 15, fig.width = 12}
+eg = upearly %>% filter(Gene.name !="NA" & Gene.name !="") %>% select(geneID)
+el = uplate %>% filter(Gene.name !="NA" & Gene.name !="") %>% select(geneID)
+liste = intersect(eg,el)
+#liste = union(eg,el)
+liste = liste %>% mutate(geneID = as.character(geneID))
+counts = cpm(DG$counts) %>% as.data.frame
+counts$geneID = rownames(counts)
+counts %>% filter(geneID %in% liste$geneID) %>% left_join(Long_description %>% select(geneID,Gene.name,Gene.description),by='geneID') %>% 
+  gather(sample,cpm,1:25) %>% left_join(infos %>% mutate(sample=name),by="sample") %>%
+  group_by(geneID,Gene.name,Gene.description,subtype,time) %>% summarize(mcpm = mean(cpm)) %>%
+  mutate(alldesc = paste(Gene.name, Gene.description," ")) %>% 
+  ggplot() + geom_line(aes(group=Gene.name,x=subtype,y=mcpm,color=alldesc)) + theme_bw() +  
+  facet_grid(Gene.name ~ time, scale = "free") + theme(axis.text.x = element_text(angle=45,hjust=1)) +
+  scale_color_discrete(name="") + ylab("Count per millions reads") + xlab("Samples")
+ggsave("Figures/Expression_levels_of_up_regulated_genes.pdf")
+```
+
+
+Here I kept list of genes up regulated in viral versus mock infection, late and early, and looked for the intersection of both lists. I filtered to keep only "known" genes. Counts per million in each samples is used to check for actual overexpression in samples infected by a virus.  
