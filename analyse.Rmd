@@ -1,7 +1,7 @@
 ---
 title: "RNAseq analysis CCS"
 author: "Etienne Loire"
-date: "6/1/2019"
+date: "23/1/2020"
 output:
   pdf_document: default
   html_document: default
@@ -78,7 +78,7 @@ ggplot() +
 ggsave("Figures/MDS_All_DATA.pdf")
 ```
 
-We see that there is indeed a problem with some of the cited Samples. Additionnaly, we remark that all Chikungunya samples are grouped with mock samples, indicating a probable experiment failure 
+We see that there is indeed a problem with some of the cited Samples
 
 ## Fitlering of unreliable samples
 ```{r}
@@ -176,6 +176,30 @@ ggsave("Figures/UP_EARLY.pdf")
 
 Up-relgulated genes following viral infection are, for the most part, related to native immune defense. Clip-domain Serine protease are clearly overrepresented (see https://www.ncbi.nlm.nih.gov/pubmed/26688791 ) as well as the prohibitin (https://www.ncbi.nlm.nih.gov/pubmed/20674955) and C-type lectin (https://www.ncbi.nlm.nih.gov/pubmed/20674955). Awesome. 
 
+
+```{r,fig.height = 20, fig.width = 15 }
+
+Early <- makeContrasts((0.5*subtypeDengue24h + 0.5*subtypeRVF24h)-(1/3*subtypeMOCKA24h + 1/3*subtypeMOCKB24h + 1/3*subtypeMOCKC24h),levels=design1)
+#DG = estimateDisp(DG,design1,robust = T)
+fit <- glmQLFit(DG, design1, robust=TRUE)
+tr <- glmTreat(fit, contrast=Early, lfc=log2(3))
+tmp  = topTags(tr,n=1000,p.value=0.05) 
+tmp$table$geneID = rownames(tmp$table)
+
+upearly = tmp$table %>% left_join(.,Long_description,by="geneID") %>% 
+  filter(logFC>0) %>% filter(Gene.description!="NA") %>% filter(Gene.description!="") %>%  
+  select(c(6,7,1,5,6,8)) 
+upearly %>%  ggtexttable(rows = NULL)
+ggsave("Figures/UP_EARLY_known_genes.pdf")
+```
+
+
+
+
+
+
+
+
 # Late viral response:
 
 ```{r, fig.height = 20, fig.width = 15}
@@ -198,6 +222,20 @@ ggsave("Figures/UP_LATE.pdf")
 Very intersingly, many up regulated genes in the early response are also upregulated 6 days post infection relative to control: Clip-domain serine protease, prohibitin, C-type lectin notably. 
 We see the additional presence of Niemann-Pick type C family  genes - already shown as related to dengue infections https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3935818/ and macroglobulin/complement (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4767563/ !)
 Transferrin is also well known to be involved in viral response ! https://www.annualreviews.org/doi/abs/10.1146/annurev-nutr-082117-051749
+
+
+```{r, fig.height = 20, fig.width = 15}
+Late <- makeContrasts((0.5*subtypeDengue6j + 0.5*subtypeRVF6j)-(1/3*subtypeMOCKA6j + 1/3*subtypeMOCKB6j + 1/3*subtypeMOCKC6j),levels=design1)
+tr <- glmTreat(fit, contrast=Late, lfc=log2(3))
+tmp  = topTags(tr,n=1000,p.value=0.05) 
+tmp$table$geneID = rownames(tmp$table)
+uplate = tmp$table %>% left_join(.,Long_description,by="geneID") %>% 
+  filter(logFC>0) %>% filter(Gene.description!="NA") %>% filter(Gene.description!="") %>%  
+  select(c(6,7,1,5,6,8)) 
+uplate %>%  ggtexttable(rows = NULL)
+ggsave("Figures/UP_LATE_known.pdf")
+```
+
 
 
 # Late versus early response
