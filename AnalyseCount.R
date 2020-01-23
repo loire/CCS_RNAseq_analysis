@@ -16,13 +16,26 @@ table(rowSums(abovecpm))
 keep = rowSums(abovecpm) >= 3 
 summary(keep)
 filtmdata = mdata[keep,]
+
+# Remove failed chick samples from analysis
+
+filtmdata = filtmdata %>% as.data.frame %>% select(-matches("CHIK")) %>%  as.matrix
+infos = infos %>%  filter(!type=="CHIK")
+
+# replace french "jour" by english "days"
+
+colnames(filtmdata) = str_replace(colnames(filtmdata),"6j","6d")
+infos$name = str_replace(infos$name,"6j","6d")
+infos$subtype = str_replace(infos$subtype,"6j","6d")
+
+
 DG = DGEList(counts = filtmdata)
 DG = calcNormFactors(DG)
 data.frame(name = colnames(DG),
            libsize = DG$samples$lib.size,
            type = infos$subtype,
            time=infos$time,sample=infos$sample) %>% 
-          arrange(.,sample,time) %>% 
+          arrange(.,sample,time)  %>% 
           ggplot() +
           geom_bar(aes(x=name,y=libsize,fill=sample),stat="identity") + 
           facet_wrap(~ type,scale="free_x")  + 
@@ -42,7 +55,6 @@ ggplot() +
 ggsave("Figures/MDS_All_DATA.pdf")
 
 
-
 toremove  = DG$samples %>% mutate(sample=rownames(.)) %>% filter(lib.size<5000000) %>% select(sample)
 toremove
 fdata = data %>% select(-c("MOCKB6jb","MOCKC6ja","RVF24hc","RVF6jc","MOCKB24hc",
@@ -55,14 +67,18 @@ table(rowSums(abovecpm))
 keep = rowSums(abovecpm) >= 3 
 summary(keep)
 filtmdata = mdata[keep,]
+
+
+
 DG = DGEList(counts = filtmdata)
+
 DG = calcNormFactors(DG)
 infos = infos %>% filter(!(name %in% c("MOCKB6jb","MOCKC6ja","RVF24hc","RVF6jc","MOCKB24hc",
                  "CHIK24ha","CHIK24hb","CHIK24hc","CHIK6ja","CHIK6jb","CHIK6jc")))
 # Reorder factor
 infos$type = factor(infos$type,levels=c("Dengue","RVF","Mock"))
-infos$subtype = factor(infos$subtype,levels=c("Dengue24h","Dengue6j","RVF24h","RVF6j",
-                                              "MOCKA24h","MOCKA6j","MOCKB24h","MOCKB6j","MOCKC24h","MOCKC6j"))
+infos$subtype = factor(infos$subtype,levels=c("Dengue24h","Dengue6d","RVF24h","RVF6d",
+                                              "MOCKA24h","MOCKA6d","MOCKB24h","MOCKB6d","MOCKC24h","MOCKC6d"))
 ggplot(data.frame(name = colnames(DG),libsize = DG$samples$lib.size,type = infos$subtype,time=infos$time,sample=infos$sample) %>% 
          arrange(.,sample,time) ) + geom_bar(aes(x=name,y=libsize,fill=sample),stat="identity") + 
   facet_wrap(~ type,scale="free_x")  + scale_fill_brewer(name="Replicats",palette ="Dark2") + xlab("Sample") +

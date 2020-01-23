@@ -16,7 +16,7 @@ This document has been generated with a R notebook. It's purpose is to describe 
 
 Our goal is to search for commonly differentialy expressed genes in Aedes aegypti in response to several arbovirus. We will thus used comparison with mock infection responses, at two different infection stages in cell cultures derived from *Aedes aegypti*. 
 
-3 replicates of 3 differents controls (mock) and 3 viral infection (dengue, RVF, and Chikungunya) in cell cultures (lines derived from Aedes aegypti) has been performed. Early (24H) and late (6days) response have been measured by RNAseq sequencing. 
+3 replicates of 3 differents controls (mock) and 2 viral infection (dengue, RVF) in cell cultures (lines derived from Aedes aegypti) has been performed. Early (24H) and late (6days) response have been measured by RNAseq sequencing. 
 Fastq reads have been analyzed (Cleaning, Mapping on reference and coverage analysis) have been performed by a third party (Montpellier Genomix Platefrom). 
 
 ## Dataset exploration and quality control
@@ -40,7 +40,7 @@ data %>% dim
 
 ```
 
-We see that we have raw counts for 19610 genes in 36 samples. 
+We see that we have raw counts for 19610 genes in 30 samples. 
 First let's filter all genes with expression values not above 0.5 count per millions reads (cpm) in at least three of the samples. 
 ```{r}
 mdata = as.matrix(data)
@@ -51,7 +51,7 @@ keep = rowSums(abovecpm) >= 3
 summary(keep)
 filtmdata = mdata[keep,]
 ```
-9894 genes satisfy this threshold
+9580 genes satisfy this threshold
 
 Now we will look at the library size of each samples and look at a multidimensional scaling plot (MDS) to see if genes expression is less variable among replicates than among groups of samples. 
 
@@ -84,8 +84,7 @@ We see that there is indeed a problem with some of the cited Samples. Additionna
 ```{r}
 toremove  = DG$samples %>% mutate(sample=rownames(.)) %>% filter(lib.size<5000000) %>% select(sample)
 toremove
-fdata = data %>% select(-c("MOCKB6jb","MOCKC6ja","RVF24hc","RVF6jc","MOCKB24hc",
-                          "CHIK24ha","CHIK24hb","CHIK24hc","CHIK6ja","CHIK6jb","CHIK6jc"))
+fdata = data %>% select(-c("MOCKB6jb","MOCKC6ja","RVF24hc","RVF6jc","MOCKB24hc"))
 mdata = as.matrix(fdata)
 mdatacpm = cpm(mdata)
 abovecpm = mdatacpm > 0.5 
@@ -94,8 +93,7 @@ summary(keep)
 filtmdata = mdata[keep,]
 DG = DGEList(counts = filtmdata)
 DG = calcNormFactors(DG)
-infos = infos %>% filter(!(name %in% c("MOCKB6jb","MOCKC6ja","RVF24hc","RVF6jc","MOCKB24hc",
-                 "CHIK24ha","CHIK24hb","CHIK24hc","CHIK6ja","CHIK6jb","CHIK6jc")))
+infos = infos %>% filter(!(name %in% c("MOCKB6jb","MOCKC6ja","RVF24hc","RVF6jc","MOCKB24hc")))
 # Reorder factor
 infos$type = factor(infos$type,levels=c("Dengue","RVF","Mock"))
 infos$subtype = factor(infos$subtype,levels=c("Dengue24h","Dengue6j","RVF24h","RVF6j",
@@ -109,8 +107,8 @@ logcount = cpm(DG$counts,log=T)
 infos$name=as.factor(infos$name)
 datalogcpm = data.frame(logcount) %>% gather(name,count) %>% left_join(infos,by = "name")
 ggplot(datalogcpm %>% arrange(.,sample,time)) + geom_violin(aes(x=name,y=count,fill=sample))  + facet_wrap(~ type,scale="free_x")  + scale_fill_brewer(palette ="Dark2") + mytheme + theme(axis.text.x = element_text(angle=45,hjust =1 )) + xlab("Samples") + ylab("Log(cpm)") + 
-  ggtitle("Distribution of log of count per million in samples")
-ggsave("Figures/LogCPM_violin_count.pdf")
+  ggtitle("Distribution of counts per million in samples")
+ggsave("Figures/LogCPM_violin_count.pdf",height =7,width =15)
 ```
 
 Selected samples exhibit a good homogenenity among samples after normalization. 
@@ -205,7 +203,6 @@ Transferrin is also well known to be involved in viral response ! https://www.an
 # Late versus early response
 
 ```{r}
-
 Early <- makeContrasts((0.5*subtypeDengue6j + 0.5*subtypeRVF6j)-(0.5*subtypeDengue24h + 0.5*subtypeRVF24h),levels=design1)
 DG = estimateDisp(DG,design1,robust = T)
 fit <- glmQLFit(DG, design1, robust=TRUE)
@@ -241,7 +238,7 @@ counts %>% filter(geneID %in% liste$geneID) %>% left_join(Long_description %>% s
   ggplot() + geom_line(aes(group=Gene.name,x=subtype,y=mcpm,color=alldesc)) + theme_bw() +  
   facet_grid(Gene.name ~ time, scale = "free") + theme(axis.text.x = element_text(angle=45,hjust=1)) +
   scale_color_discrete(name="") + ylab("Count per millions reads") + xlab("Samples")
-
+ggsave("Figures/Expression_levels_of_up_regulated_genes.pdf")
 ```
 
 
