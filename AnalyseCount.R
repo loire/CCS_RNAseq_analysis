@@ -1,4 +1,4 @@
-require(tidyverse)
+require(tidyjkverse)
 require(edgeR)
 require(ggrepel)
 require(ggpubr)
@@ -9,6 +9,7 @@ infos = infos %>% mutate(subtype = substring(name,1,nchar(as.character(name))-1)
 data  = read.csv("Data/Raw_Counts_RNA-Seq_CetreSossah.txt",sep=",",header=T,row.names = 1)
 
 
+
 mdata = as.matrix(data)
 mdatacpm = cpm(mdata)
 abovecpm = mdatacpm > 0.5 
@@ -16,6 +17,8 @@ table(rowSums(abovecpm))
 keep = rowSums(abovecpm) >= 3 
 summary(keep)
 filtmdata = mdata[keep,]
+
+
 
 # Remove failed chick samples from analysis
 
